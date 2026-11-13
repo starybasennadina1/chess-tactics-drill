@@ -1,0 +1,82 @@
+
+
+You are running headless inside the Android App Factory pipeline for AppName=ChessTacticsDrill.
+
+The project has been scaffolded at /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill — a NATIVE Android app in the JETPACK COMPOSE UI MODE: Kotlin + Jetpack Compose + Material 3, Single Activity (ComponentActivity + setContent), ViewModels with StateFlow, navigation as a state machine in a ViewModel. Gradle 9.6.0 wrapper, AGP 9.4.1 with built-in Kotlin 2.2.10, Compose Compiler plugin 2.2.10, Compose BOM from the Version Catalog android/gradle/libs.versions.toml, compileSdk 37.1 / targetSdk 37 (edge-to-edge enforced) / minSdk 26. Gradle root is /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill/android/. Package / applicationId / namespace = com.chesstactics.drill.
+Kotlin sources: /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill/android/app/src/main/java/com/chesstactics/drill/   (android/app/src/main/java — NOT src/main/kotlin)
+Resources:      /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill/android/app/src/main/res/   (platform configuration ONLY — never UI)
+The template MainActivity.kt shows a TemplateStub composable and strings.xml has @string/template_stub — placeholders; replace them with the real app (remove the stub composable and the string). Launcher icons (mipmap-*, mipmap-anydpi-v26, values/ic_launcher_background.xml) and res/drawable/<asset>.png are produced by the pipeline — do not create or edit them.
+
+Read these in order:
+  /c/Users/Administrator/Desktop/AndroidWorkspace/CLAUDE-kotlin-compose.md    <-- workspace-wide rules for the Compose mode. Its section "MANDATORY REQUIREMENTS" is a hard checklist.
+  /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill/prompts/ChessTacticsDrill.md
+
+HARD REQUIREMENTS (all of them, no exceptions):
+  - The WHOLE UI is Jetpack Compose: screens, navigation, dialogs, settings, every state. FORBIDDEN anywhere: res/layout, res/navigation, res/menu, res/anim, res/values/colors.xml, res/values/dimens.xml, res/values/styles.xml, *Fragment.kt, androidx.fragment, androidx.appcompat, com.google.android.material, androidx.recyclerview, androidx.constraintlayout, ViewBinding, DataBinding, setContentView, findViewById, LayoutInflater, AndroidView, AndroidViewBinding, androidx.navigation.
+  - Single Activity: MainActivity (com.chesstactics.drill.MainActivity — the test harness runs "am start -n com.chesstactics.drill/.MainActivity") : ComponentActivity, enableEdgeToEdge() before super.onCreate, then setContent { AppTheme { AppRoot() } }.
+  - Navigation = state machine: core/navigation/Screen.kt (sealed interface Screen: Splash, Menu, Game, GameOver(...) plus optional screens), presentation/app/AppViewModel.kt (StateFlow<Screen> + back stack list, navigate/back), presentation/app/AppRoot.kt (AnimatedContent(targetState = screen) with fadeIn() togetherWith fadeOut() and a BackHandler). Forward navigation pushes onto the back stack; the system Back button returns to the previous screen; Back on Menu closes the app; the splash is never on the back stack.
+  - Portrait-only design but NOT locked: no android:screenOrientation, no android:configChanges, no setRequestedOrientation. State survives rotation because it lives in ViewModels; rememberSaveable only for transient visual state.
+  - Not fullscreen: keep status and navigation bars visible (no windowFullscreen, FLAG_FULLSCREEN, immersive flags, WindowInsetsControllerCompat.hide). Every screen draws its background full-bleed and pads the content with Modifier.safeDrawingPadding() (or Scaffold innerPadding).
+  - MVVM: a composable renders state and forwards actions and NEVER calls a Repository, UseCase or SharedPreferences; each screen has <Name>ViewModel.kt exposing StateFlow<UiState> (immutable data class, update { it.copy(...) }); one-shot events through a Channel collected in LaunchedEffect(Unit); state collected with collectAsStateWithLifecycle(); coroutines only in viewModelScope (no GlobalScope, runBlocking, Thread.sleep); timers, loops and writes start from the ViewModel, never from LaunchedEffect(Unit); game loops stop when the round ends or the screen leaves (DisposableEffect onDispose → viewModel.pause()).
+  - Clean architecture: presentation (Screen composable + ViewModel + UiState) → domain (models, repository interfaces, use cases — pure Kotlin, no android.* imports) → data (repository implementations, local SharedPreferences wrapper, sample data). Apply SOLID to the actual complexity: no interfaces, use cases or modules without a concrete need. There is NO minimum number of files.
+  - Real functionality from the design doc: the game rules / calculations, interactions, results, progression and persistence are implemented. Every visible button does something (no onClick = {}), every transition is reachable, initial / loading / empty / error / finished states exist where they make sense. No fake progress, no hardcoded results instead of logic, no template screens that do not match the task.
+  - Fully offline: no INTERNET permission, no network code. No monetization of any kind.
+  - Local storage only (SharedPreferences wrapper in data/local/ behind a domain repository; best score / settings / progress survive force-stop and reopening).
+  - No Application class. Dependencies in core/di/ServiceLocator.kt (initialised from MainActivity with applicationContext) + core/di/AppViewModelFactory.kt (ViewModelProvider.Factory); every ViewModel is obtained with viewModel(factory = ...).
+  - Polished splash in presentation/splash/ (SplashScreen.kt + SplashViewModel.kt): app title, an INDETERMINATE LinearProgressIndicator()/CircularProgressIndicator() (no progress parameter), looping decorative animations (rememberInfiniteTransition). NO tap to skip (no clickable/onClick/pointerInput). The transition fires automatically from the SplashViewModel timer (viewModelScope.launch { delay(GameConfig.LOADER_DURATION_MS); _finished.value = true }); SplashScreen collects finished and calls onFinished() once; no delay( inside SplashScreen.kt; animations are independent of the navigation timing. No androidx.core.splashscreen. Set android:windowBackground in res/values/themes.xml to the splash top colour (hex) so the cold start shows no black frame — that file keeps ONLY window attributes.
+  - Theme in Kotlin: core/theme/Color.kt (the design-doc preset palette), Type.kt (Typography, at least 4 levels), Theme.kt (AppTheme = MaterialTheme with a custom darkColorScheme/lightColorScheme). No XML colours/dimens/styles.
+  - Reusable UI components: at least 2 shared composables in core/ui/ (PrimaryButton, StatCard, ...) used on several screens; files in core/ never end with Screen.kt.
+  - Accessibility: contentDescription on meaningful images (null on decorative ones), touch targets >= 48dp, Modifier.semantics { stateDescription } for changing states, liveRegion = LiveRegionMode.Polite on score/status, visually distinct disabled states.
+  - Meaningful sample data in data/sample/SampleData.kt that fits the app theme (no "Item 1", no lorem ipsum).
+  - NO comments anywhere (.kt, XML, Gradle), no println/Log, no TODO, no @Preview (ui-tooling-preview is not in the catalog).
+
+PIPELINE CONTRACT (the QA harness depends on it):
+  - Screen flow Splash → Menu → Game → GameOver/Result → Menu. A GameOver/Result screen (presentation/gameover/GameOverScreen.kt or *ResultScreen.kt) is mandatory and must appear within ~3s of losing input.
+  - core/config/GameConfig.kt: const val LOADER_DURATION_MS = 8000L — the SplashViewModel waits exactly this long, then the splash navigates automatically.
+  - CTA buttons are material3 Button/OutlinedButton/TextButton with a Text child whose value comes from strings.xml and is written UPPERCASE: the main menu CTA is PLAY (utility apps: START/OPEN/CREATE), the replay CTA contains AGAIN (PLAY AGAIN / TRY AGAIN), back is MENU. uiautomator finds buttons by this literal text — no icon-only CTAs, no text baked into images, no bare Image with clickable as the main CTA.
+  - Screens are named <Name>Screen.kt under presentation/<feature>/ (the gates count them). ALL user-visible text comes from strings.xml via stringResource.
+  - Images: every entry of /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill/assets.json becomes res/drawable/<name>.png (the pipeline generates the PNG, moves it into drawable and keeps it under 1000px with the aspect ratio preserved). Reference images ONLY as painterResource(R.drawable.<name>) where <name> is the assets.json name (lowercase a-z0-9_). Never read assets/ from code, never put your own PNGs into drawable. Backgrounds: fillMaxSize + ContentScale.Crop + gradient overlay; sprites: fixed dp size + ContentScale.Fit; never ContentScale.FillBounds.
+  - Do NOT edit any Gradle file, libs.versions.toml, the wrapper, keepRules, key.properties, local.properties or the launcher icons. Do NOT add dependencies (no material-icons-extended, navigation-compose, core-splashscreen, ui-tooling). Do NOT add signing config. Do NOT run gradlew.
+
+
+
+If you are NOT in EDIT MODE (no USER FEEDBACK block at the bottom of this prompt), implement the full structure from CLAUDE-kotlin-compose.md ("PROJECT STRUCTURE") under /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill/android/app/src/main/java/com/chesstactics/drill/ and /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill/android/app/src/main/res/ (strings.xml + themes.xml only),
+(images: ONLY the file names of the ASSET CONTRACT below - the pipeline writes assets.json itself, do not write it).
+
+SELF-VERIFICATION before printing STEP_2_DONE:
+  1. Every package declaration starts with com.chesstactics.drill and matches its directory under android/app/src/main/java; every import resolves (androidx.compose.foundation.layout.*, androidx.compose.material3.*, androidx.compose.runtime.*, androidx.compose.ui.*, androidx.lifecycle.compose.collectAsStateWithLifecycle, androidx.lifecycle.viewmodel.compose.viewModel, androidx.activity.compose.BackHandler); every R.string / R.drawable you reference exists (drawables from assets.json count as existing).
+  2. No res/layout, res/menu, res/navigation, res/anim, colors.xml, dimens.xml, styles.xml; no *Fragment.kt; no androidx.fragment / appcompat / material / recyclerview / constraintlayout / navigation imports; no ViewBinding, setContentView, findViewById, LayoutInflater, AndroidView; no Application subclass, no screenOrientation / configChanges, no fullscreen flags, no INTERNET permission, no ads/billing, no comments, no @Preview, no println/Log.
+  3. MainActivity : ComponentActivity with enableEdgeToEdge() + setContent { AppTheme { AppRoot() } }; AppRoot uses AnimatedContent + BackHandler; Screen.kt is a sealed interface with a GameOver/Result entry; AppViewModel keeps the back stack.
+  4. Files with @Composable never mention Repository, UseCase or SharedPreferences; every ViewModel exposes StateFlow; collectAsStateWithLifecycle everywhere; no GlobalScope/runBlocking/Thread.sleep; no onClick = {}; no MutableStateFlow inside composable files; no LaunchedEffect(Unit) that starts timers or writes.
+  5. SplashScreen has an indeterminate indicator, no click/touch handling, no delay( inside the composable; SplashViewModel delays GameConfig.LOADER_DURATION_MS = 8000L; themes.xml windowBackground equals the splash top colour.
+  6. A GameOver/Result screen exists and GameScreen reaches it within ~3s of bad input; Back returns to the previous screen; the game loop stops on dispose.
+  7. Every screen pads content with safeDrawingPadding()/Scaffold; every assets.json name except icon_1024 is used as R.drawable.<name>; no ContentScale.FillBounds.
+  8. strings.xml contains the PLAY (or START) CTA text and an AGAIN replay text; the template_stub string and the TemplateStub composable are gone; no literal user-visible text inside Text(...).
+
+
+=== ASSET CONTRACT (overrides any older asset-manifest instruction, incl. "Step 1.5" in the rule books) ===
+The art is drawn by Codex IN PARALLEL with you and it does not read your code. It always produces
+exactly these PNG files in /c/Users/Administrator/Desktop/AndroidWorkspace/projects/ChessTacticsDrill/assets/ - and NOTHING else:
+  bg_game.png        780x1666, opaque full-screen background. The ONLY background: use it on every
+                     screen (Loader / Menu / Game / GameOver) and tell the screens apart with different
+                     gradient overlays (Loader darker, overlay 0.85+).
+  logo.png           up to 350 px, transparent, the game emblem without any text.
+  icon_home.png      250x250, transparent navigation "home" glyph.
+  icon_pause.png     250x250, transparent navigation "pause" glyph.
+  sprite_1.png .. sprite_5.png   250x250, transparent game objects themed on the brief. Their exact
+                     content is unknown in advance: treat them as interchangeable game symbols / items
+                     and size them with contain.
+  (no button images for Kotlin: every button stays a material3 Button)
+  icon_1024.png      the launcher icon (the ticket's w_icon.png, else drawn by Codex) - the pipeline
+                     installs it into the launcher mipmaps itself; never reference it from code.
+The pipeline copies them to res/drawable/<name>.png: reference them ONLY as painterResource(R.drawable.<name>).
+Rules:
+  - Reference ONLY the names above. Never invent another image name (bg_menu, bg_loader, sprite_coin,
+    tile_red, ...): such a file will never exist and the build fails on it.
+  - Show bg_game, logo and all of sprite_1..sprite_5 somewhere visible.
+  - Do NOT write or edit assets.json - the pipeline writes it from the Codex output.
+  - reel_grid.png may appear for slot games; never depend on it.
+=== END ASSET CONTRACT ===
+
+If sources + resources are written AND the checks above pass, print ONLY:
+STEP_2_DONE
